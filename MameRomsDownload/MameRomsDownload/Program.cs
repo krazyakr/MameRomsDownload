@@ -1,10 +1,12 @@
-﻿using System;
+﻿using HtmlAgilityPack;
+using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 
@@ -16,10 +18,78 @@ namespace MameRomsDownload
         {
             CookieCollection cookies = GetAuthenticatedCookies();
 
-            foreach (Cookie cookie in cookies)
-                Console.WriteLine(cookie.ToString());
+            //foreach (Cookie cookie in cookies)
+            //    Console.WriteLine(cookie.ToString());
+
+            string basePage = GetPage(Properties.Settings.Default.SiteRomsBasePath, cookies);
+
+            ScrapePage(cookies, basePage);
 
             Console.ReadKey();
+        }
+
+        private static void ScrapePage(CookieCollection cookies, string basePage)
+        {
+            HtmlDocument htmlDoc = new HtmlDocument();
+            htmlDoc.LoadHtml(basePage);
+
+            HtmlNode table = htmlDoc.GetElementbyId("dir_content");
+
+            if (table != null)
+            {
+                foreach (HtmlNode row in table.ChildNodes)
+                {
+                    HtmlNode link = null;
+                    var childs = row.Descendants("a");
+                    if (childs.Count() > 0)
+                    {
+                        link = childs.First();
+                        Uri url = new Uri(Properties.Settings.Default.SiteRomsBasePath);
+                        string tmpPath = url.AbsoluteUri.Substring(0, url.AbsoluteUri.IndexOf("?"));
+                        tmpPath = tmpPath.Substring(0, tmpPath.LastIndexOf("/") + 1);
+                        string childPageLink = tmpPath + link.Attributes["href"].Value;
+
+                        Console.WriteLine(link.InnerText + " =>> " + childPageLink);
+
+                        string page = GetPage(childPageLink, cookies);
+
+                        ScrapePage(cookies, page);
+                    }
+                }
+            }
+        }
+
+        private static string GetPage(string url, CookieCollection cookies)
+        {
+            Thread.Sleep(5 * 1000);
+
+            HttpWebRequest request = WebRequest.CreateHttp(url);
+
+            request.KeepAlive = true;
+            request.UserAgent = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.89 Safari/537.36";
+
+            request.CookieContainer = new CookieContainer();
+            request.CookieContainer.Add(cookies);
+
+            HttpWebResponse response = (HttpWebResponse)request.GetResponse();
+
+            // Display the status.
+            //Console.WriteLine(((HttpWebResponse)response).StatusDescription);
+            // Get the stream containing content returned by the server.
+            Stream dataStream = response.GetResponseStream();
+            // Open the stream using a StreamReader for easy access.
+            StreamReader reader = new StreamReader(dataStream);
+            // Read the content.
+            string responseFromServer = reader.ReadToEnd();
+            // Display the content.
+            //Console.WriteLine(responseFromServer);
+
+            string page = responseFromServer;
+
+            // Clean up the streams and the response.
+            reader.Close();
+            response.Close();
+            return page;
         }
 
         private static CookieCollection GetAuthenticatedCookies()
