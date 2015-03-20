@@ -15,9 +15,49 @@ namespace MameRomsDownload
     class Program
     {
         static List<string> files2Download = new List<string>();
-        static int maxFiles2Download = 5;
+        static int maxFiles2Download = int.MaxValue;
+        static string destinationFolder = "";
 
         static void Main(string[] args)
+        {
+            if (args.Length != 1 && args.Length != 2)
+            {
+                Console.WriteLine("Usage: MameRomsDownload <options> ");
+                Console.WriteLine("    Options:");
+                Console.WriteLine("        --path=<destination_path>  [Mandatory] Destination folder where to download all the files");
+                Console.WriteLine("        --maxFiles=<max_files>     [Optional]  Max number of files to download");
+            }
+            else
+            {
+                foreach(string arg in args)
+                {
+                    if(arg.StartsWith("--path"))
+                    {
+                        destinationFolder = arg.Split('=')[1];
+
+                        destinationFolder = destinationFolder.Replace('\\','/');
+                        destinationFolder = destinationFolder.EndsWith("/") ? destinationFolder : destinationFolder + '/';
+                    }
+                    else if (arg.StartsWith("--maxFiles"))
+                    {
+                        try
+                        {
+                            maxFiles2Download = int.Parse(arg.Split('=')[1]);
+                        }
+                        catch (Exception)
+                        {
+                            // nothing to do
+                        }
+                    }
+                }
+
+                Process();
+            }
+
+            Console.ReadKey();
+        }
+
+        private static void Process()
         {
             Console.WriteLine("Authenticating ... ");
             CookieCollection cookies = GetAuthenticatedCookies();
@@ -34,7 +74,20 @@ namespace MameRomsDownload
 
             Console.WriteLine(string.Format("Found {0} files to download.", files2Download.Count));
 
-            Console.ReadKey();
+            foreach (string link in files2Download)
+            {
+                //Console.WriteLine("Downloading file: " + link);
+
+                Uri url = new Uri(Properties.Settings.Default.SiteRomsBasePath);
+                string tmpPath = url.AbsoluteUri.Substring(0, url.AbsoluteUri.IndexOf("?"));
+                tmpPath = tmpPath.Substring(0, tmpPath.LastIndexOf("/") + 1);
+                string childPageLink = tmpPath + link;
+
+                //Console.WriteLine(string.Format("Full path: {0}",childPageLink));
+
+                DownloadFile(childPageLink, cookies);
+
+            }
         }
 
         private static void ScrapePage(CookieCollection cookies, string basePage)
@@ -117,6 +170,27 @@ namespace MameRomsDownload
             reader.Close();
             response.Close();
             return page;
+        }
+
+        private static void DownloadFile(string url, CookieCollection cookies)
+        {
+            Thread.Sleep(500);
+
+            WebClient webClient = new WebClient();
+            webClient.Headers.Add(HttpRequestHeader.Cookie,cookies.ToString());
+            webClient.Headers.Add(HttpRequestHeader.UserAgent,"Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.89 Safari/537.36");
+            webClient.Headers.Add(HttpRequestHeader.Host,"www.theoldcomputer.com");
+            webClient.Headers.Add(HttpRequestHeader.Accept,"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+            webClient.Headers.Add(HttpRequestHeader.Referer,"http://www.theoldcomputer.com/roms/getfile.php?file=Li9NQU1FL01hbWU0QWxsL3JvbXMvMC05LzNjb3VudGIuemlw");
+            webClient.Headers.Add(HttpRequestHeader.AcceptEncoding,"gzip, deflate, sdch");
+
+            webClient.DownloadFile(url, destinationFolder + "temp.download");
+
+            var headerX = webClient.ResponseHeaders["Content-Disposition"];
+            string filename = headerX.Split('=')[1].Replace("\"", "");
+
+            System.IO.File.Move(destinationFolder + "temp.download", destinationFolder + filename);
+            Console.WriteLine(string.Format("{0} rom downloaded.", filename));
         }
 
         private static CookieCollection GetAuthenticatedCookies()
