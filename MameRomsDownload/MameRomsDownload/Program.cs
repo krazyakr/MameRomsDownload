@@ -14,25 +14,52 @@ namespace MameRomsDownload
 {
     class Program
     {
+        static List<string> files2Download = new List<string>();
+        static int maxFiles2Download = 5;
+
         static void Main(string[] args)
         {
+            Console.WriteLine("Authenticating ... ");
             CookieCollection cookies = GetAuthenticatedCookies();
+            Console.WriteLine("Done.");
 
             //foreach (Cookie cookie in cookies)
             //    Console.WriteLine(cookie.ToString());
 
+            Console.WriteLine("Getting list of files ... ");
             string basePage = GetPage(Properties.Settings.Default.SiteRomsBasePath, cookies);
 
             ScrapePage(cookies, basePage);
+            Console.WriteLine("Done.");
+
+            Console.WriteLine(string.Format("Found {0} files to download.", files2Download.Count));
 
             Console.ReadKey();
         }
 
         private static void ScrapePage(CookieCollection cookies, string basePage)
         {
-            HtmlDocument htmlDoc = new HtmlDocument();
-            htmlDoc.LoadHtml(basePage);
+            if (files2Download.Count < maxFiles2Download)
+            {
+                HtmlDocument htmlDoc = new HtmlDocument();
+                htmlDoc.LoadHtml(basePage);
 
+                ScrapeList(cookies, htmlDoc);
+
+                ScrapeDownloadLink(htmlDoc);
+            }
+        }
+
+        private static void ScrapeDownloadLink(HtmlDocument htmlDoc)
+        {
+            var ahrefs = htmlDoc.DocumentNode.Descendants("a").Where(x => x.InnerText.Contains("Download"));
+
+            if (ahrefs.Count() == 1)
+                files2Download.Add(ahrefs.First<HtmlNode>().Attributes["href"].Value);
+        }
+
+        private static void ScrapeList(CookieCollection cookies, HtmlDocument htmlDoc)
+        {
             HtmlNode table = htmlDoc.GetElementbyId("dir_content");
 
             if (table != null)
@@ -49,7 +76,7 @@ namespace MameRomsDownload
                         tmpPath = tmpPath.Substring(0, tmpPath.LastIndexOf("/") + 1);
                         string childPageLink = tmpPath + link.Attributes["href"].Value;
 
-                        Console.WriteLine(link.InnerText + " =>> " + childPageLink);
+                        //Console.WriteLine(link.InnerText + " =>> " + childPageLink);
 
                         string page = GetPage(childPageLink, cookies);
 
@@ -61,7 +88,7 @@ namespace MameRomsDownload
 
         private static string GetPage(string url, CookieCollection cookies)
         {
-            Thread.Sleep(5 * 1000);
+            Thread.Sleep(500);
 
             HttpWebRequest request = WebRequest.CreateHttp(url);
 
